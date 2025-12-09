@@ -24,8 +24,8 @@ export default function Index() {
   const [recordingURI, setRecordingURI] = useState<string | null>(null);
   const [audioFiles, setAudioFiles] = useState<Recording[]>([]);
   const [isRecording, setIsRecording] = useState<boolean>(false);
-  const [isEditing, setIsEditing] = useState<boolean>(false);
-  const [editField, setEditField] = useState<string>('');
+  const [editIndex, setEditIndex] = useState<number | null>(null);
+  const [editText, setEditText] = useState<string>('');
   const player = useAudioPlayer();
 
   useEffect(() => {
@@ -103,6 +103,32 @@ export default function Index() {
     return;
   }
 
+  const saveEdit = (index: number) => {
+    const file = audioFiles[index];
+    const dir = Paths.document.uri + '/recordings/';
+
+    // keep extension
+    const ext = file.name.split('.').pop();
+    const newName = `${editText}.${ext}`;
+    const newPath = dir + newName;
+
+    try {
+      const f = new File(file.uri);
+      f.move(new File(newPath));
+
+      setAudioFiles(prev => {
+        const updated = [...prev];
+        updated[index] = { uri: newPath, name: newName };
+        return updated;
+      });
+    } catch (error) {
+      console.log('Rename failed:', error);
+    }
+
+    setEditIndex(null);
+    setEditText('');
+  }
+
   return (
     <SafeAreaView style={{ display: 'flex', flex: 1, justifyContent: 'flex-start', alignItems: 'center', gap: 20, backgroundColor: '#E3FFFF' }}>
       <View style={style.titleContainer}>
@@ -120,19 +146,19 @@ export default function Index() {
         {audioFiles && (
           <>
             {audioFiles.map((file, index) => {
+              const isEditingThis = editIndex === index;
               return (
                 <View key={file.uri} style={style.entry}>
-                  {!isEditing ? (
-                    <Text style={{ color: '#004F98', fontSize: 18 }}>Recording {index + 1}</Text>
+                  {!isEditingThis ? (
+                    <Text style={{ color: '#004F98', fontSize: 18 }}>{file.name.slice(0, 15)}</Text>
                   ) : (
                     <TextInput
                       style={{ color: '#004F98', fontSize: 18, padding: 0 }}
-                      value={`Recording ${index + 1}`}
-                      onChangeText={setEditField}
+                      value={editText}
+                      onChangeText={setEditText}
                     />
                   )}
-                  {/* <Text style={{ color: '#004F98', fontSize: 18 }}>Recording {index + 1}</Text> */}
-                  {!isEditing ? (
+                  {!isEditingThis ? (
                     <View style={{ display: 'flex', flexDirection: 'row', gap: 8 }}>
                       <TouchableOpacity onPress={() => {
                         player.replace(file.uri);
@@ -143,7 +169,8 @@ export default function Index() {
                       </TouchableOpacity>
                       <TouchableOpacity onPress={() => {
                         // Edit audio file name
-                        setIsEditing(true);
+                        setEditIndex(index);
+                        setEditText(file.name.slice(0, 15));
                       }}>
                         <MaterialIcons size={25} name='edit' />
                       </TouchableOpacity>
@@ -160,13 +187,14 @@ export default function Index() {
                     <View style={{ display: 'flex', flexDirection: 'row', gap: 8 }}>
                       <TouchableOpacity onPress={() => {
                         // confirm changes
-                        setIsEditing(false);
+                        saveEdit(index);
                       }}>
-                        <MaterialIcons size={25} name='check' color={'green'}/>
+                        <MaterialIcons size={25} name='check' color={'green'} />
                       </TouchableOpacity>
                       <TouchableOpacity onPress={() => {
                         // deny changes
-                        setIsEditing(false);
+                        setEditIndex(null);
+                        setEditText('');
                       }}>
                         <MaterialIcons size={25} name='clear' color={'red'} />
                       </TouchableOpacity>
@@ -213,6 +241,7 @@ const style = StyleSheet.create({
     width: '90%',
     height: 60,
     paddingLeft: 10,
+    paddingRight: 10,
     backgroundColor: '#fff'
   },
   entryContainer: {
