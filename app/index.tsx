@@ -6,11 +6,12 @@ import {
   useAudioRecorder,
   useAudioRecorderState
 } from 'expo-audio';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Directory, File, Paths } from 'expo-file-system';
+import WaveFormDisplay from '@/components/WaveFormDisplay';
 
 interface Recording {
   uri: string,
@@ -18,7 +19,10 @@ interface Recording {
 }
 
 export default function Index() {
-  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const audioRecorder = useAudioRecorder({
+    ...RecordingPresets.HIGH_QUALITY,
+    isMeteringEnabled: true
+  });
   const recorderState = useAudioRecorderState(audioRecorder);
   const [permissions, setPermissions] = useState<boolean>(false);
   const [recordingURI, setRecordingURI] = useState<string | null>(null);
@@ -26,20 +30,29 @@ export default function Index() {
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [editText, setEditText] = useState<string>('');
+  const latestDecible = useRef<number | null>(null);
   const player = useAudioPlayer();
 
   useEffect(() => {
     loadRecordings();
   }, []);
 
+  useEffect(() => {
+    if (recorderState.metering != null) {
+      latestDecible.current = recorderState.metering;
+    }
+    console.log(latestDecible.current);
+  }, [recorderState.isRecording, recorderState.metering])
+
   const loadRecordings = () => {
     try {
       const recordingsPath = Paths.document.uri + '/recordings/';
       const files = new Directory(recordingsPath).list();
       const audioData = files.map(file => {
+        const nameNoExt = file.name.replace(/\.[^/.]+$/, '');
         return {
           uri: file.uri,
-          name: file.name
+          name: nameNoExt
         }
       });
       setAudioFiles(audioData);
@@ -99,10 +112,6 @@ export default function Index() {
     </SafeAreaView>
   }
 
-  const setName = () => {
-    return;
-  }
-
   const saveEdit = (index: number) => {
     const file = audioFiles[index];
     const dir = Paths.document.uri + '/recordings/';
@@ -118,7 +127,7 @@ export default function Index() {
 
       setAudioFiles(prev => {
         const updated = [...prev];
-        updated[index] = { uri: newPath, name: newName };
+        updated[index] = { uri: newPath, name: editText };
         return updated;
       });
     } catch (error) {
@@ -130,12 +139,13 @@ export default function Index() {
   }
 
   return (
-    <SafeAreaView style={{ display: 'flex', flex: 1, justifyContent: 'flex-start', alignItems: 'center', gap: 20, backgroundColor: '#E3FFFF' }}>
+    <SafeAreaView style={{ display: 'flex', flex: 1, justifyContent: 'center', alignItems: 'center', gap: 20, backgroundColor: '#E3FFFF' }}>
       <View style={style.titleContainer}>
         <MaterialIcons size={30} name='mic' />
         <Text style={{ fontSize: 30, fontWeight: '500' }}>Voice Recorder</Text>
       </View>
       <View style={{ height: 2, width: '85%', backgroundColor: 'lightgrey', opacity: 55 }}></View>
+      <WaveFormDisplay recordingInProgress={recorderState.isRecording} latestDecible={latestDecible} />
       <TouchableOpacity onPress={recorderState.isRecording ? stopRecording : record} style={[style.button, { backgroundColor: isRecording ? 'red' : 'white' }]}>
         <MaterialIcons size={30} name='mic' />
         <Text style={{ fontSize: 24 }}>{recorderState.isRecording ? 'Stop recording' : 'Start recording'}</Text>
@@ -148,12 +158,24 @@ export default function Index() {
             {audioFiles.map((file, index) => {
               const isEditingThis = editIndex === index;
               return (
-                <View key={file.uri} style={style.entry}>
+                <View key={file.uri} style={[style.entry, { backgroundColor: isEditingThis ? 'lightblue' : '#fff' }, { borderColor: isEditingThis ? '#004F98' : 'grey'}]}>
                   {!isEditingThis ? (
-                    <Text style={{ color: '#004F98', fontSize: 18 }}>{file.name.slice(0, 15)}</Text>
+                    <Text style={{ color: '#004F98', fontSize: 18 }}>{file.name.slice(0, 20)}</Text>
                   ) : (
                     <TextInput
-                      style={{ color: '#004F98', fontSize: 18, padding: 0 }}
+                      style={{
+                        color: '#004F98',
+                        fontSize: 18,
+                        paddingLeft: 7,
+                        paddingVertical: 0,
+                        textAlignVertical: 'center',
+                        backgroundColor: '#fff',
+                        height: 40,
+                        width: '77%',
+                        borderRadius: 5,
+                        borderWidth: 1,
+                        borderColor: '#004F98'
+                      }}
                       value={editText}
                       onChangeText={setEditText}
                     />
@@ -217,7 +239,6 @@ const style = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
-    marginTop: '10%'
   },
   button: {
     display: 'flex',
@@ -239,14 +260,14 @@ const style = StyleSheet.create({
     borderWidth: 2,
     borderRadius: 10,
     width: '90%',
-    height: 60,
+    height: 67,
     paddingLeft: 10,
     paddingRight: 10,
     backgroundColor: '#fff'
   },
   entryContainer: {
     display: 'flex',
-    maxHeight: 250,
+    maxHeight: '50%',
     width: '85%',
     borderColor: 'lightgrey',
     borderWidth: 2,
