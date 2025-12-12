@@ -57,6 +57,7 @@ export default function Index() {
       });
       setAudioFiles(audioData);
     } catch (error) {
+      console.log('Error when loading recordings.');
       console.log(error);
     } finally {
       console.log('Done.');
@@ -65,27 +66,41 @@ export default function Index() {
 
   const record = async () => {
     console.log('Starting recording.');
+    if (isRecording == true) return;
     setIsRecording(true);
     await audioRecorder.prepareToRecordAsync();
     audioRecorder.record();
   }
 
   const stopRecording = async () => {
+    if (!isRecording) return;
     console.log('Stopping recording.')
-    setIsRecording(false);
-    await audioRecorder.stop();
-    const uri = audioRecorder.uri;
-    if (!uri) return;
-    console.log(`Recording available at ${uri}.`);
-    const recordingsPath = Paths.document.uri + '/recordings/';
-    const recordingsDir = new Directory(recordingsPath);
-    if (!recordingsDir.exists) {
-      recordingsDir.create();
+    try {
+      setIsRecording(false);
+
+      await audioRecorder.stop();
+
+      const uri = audioRecorder.uri;
+      if (!uri) return;
+      console.log(`Recording available at ${uri}.`);
+      
+      const recordingsPath = Paths.document.uri + '/recordings/';
+      const recordingsDir = new Directory(recordingsPath);
+      if (!recordingsDir.exists) {
+        recordingsDir.create();
+      }
+
+      await new Promise(res => setTimeout(res, 150));
+
+      const audioFile = new File(uri);
+      const newPath = recordingsDir.uri + audioFile.name;
+      audioFile.move(new File(newPath));
+      setAudioFiles(prev => [...prev, { uri: newPath, name: audioFile.name }]);
+      setRecordingURI(newPath);
+    } catch (e) {
+      console.log('Error when stopping recording.');
+      console.log(e);
     }
-    const audioFile = new File(uri);
-    audioFile.move(recordingsDir);
-    setAudioFiles(prev => [...prev, audioFile])
-    setRecordingURI(uri);
   }
 
   useEffect(() => {
@@ -139,13 +154,15 @@ export default function Index() {
   }
 
   return (
-    <SafeAreaView style={{ display: 'flex', flex: 1, justifyContent: 'center', alignItems: 'center', gap: 20, backgroundColor: '#E3FFFF' }}>
-      <View style={style.titleContainer}>
+    <SafeAreaView style={{ display: 'flex', flex: 1, justifyContent: 'flex-start', alignItems: 'center', gap: 20, backgroundColor: '#E3FFFF', }}>
+      <View style={[style.titleContainer, { marginTop: 20 }]}>
         <MaterialIcons size={30} name='mic' />
         <Text style={{ fontSize: 30, fontWeight: '500' }}>Voice Recorder</Text>
       </View>
       <View style={{ height: 2, width: '85%', backgroundColor: 'lightgrey', opacity: 55 }}></View>
-      <WaveFormDisplay recordingInProgress={recorderState.isRecording} latestDecible={latestDecible} />
+      {isRecording && (
+        <WaveFormDisplay recordingInProgress={recorderState.isRecording} latestDecible={latestDecible} />
+      )}
       <TouchableOpacity onPress={recorderState.isRecording ? stopRecording : record} style={[style.button, { backgroundColor: isRecording ? 'red' : 'white' }]}>
         <MaterialIcons size={30} name='mic' />
         <Text style={{ fontSize: 24 }}>{recorderState.isRecording ? 'Stop recording' : 'Start recording'}</Text>
@@ -158,7 +175,7 @@ export default function Index() {
             {audioFiles.map((file, index) => {
               const isEditingThis = editIndex === index;
               return (
-                <View key={file.uri} style={[style.entry, { backgroundColor: isEditingThis ? 'lightblue' : '#fff' }, { borderColor: isEditingThis ? '#004F98' : 'grey'}]}>
+                <View key={file.uri} style={[style.entry, { backgroundColor: isEditingThis ? 'lightblue' : '#fff' }, { borderColor: isEditingThis ? '#004F98' : 'grey' }]}>
                   {!isEditingThis ? (
                     <Text style={{ color: '#004F98', fontSize: 18 }}>{file.name.slice(0, 20)}</Text>
                   ) : (
@@ -267,7 +284,7 @@ const style = StyleSheet.create({
   },
   entryContainer: {
     display: 'flex',
-    maxHeight: '50%',
+    flex: 1,
     width: '85%',
     borderColor: 'lightgrey',
     borderWidth: 2,
